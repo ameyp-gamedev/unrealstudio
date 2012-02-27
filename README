@@ -1,0 +1,7 @@
+This is a partial implementation of an Unrealscript parser written in Xtext. A bunch of a stuff works, a whole bunch of other stuff doesn't work.
+
+To test it, launch the Xtext version of Eclipse, create a blank Xtext project and import all classes, launch configurations etc. Launch the GenerateUnrealscript.mwe2 configuration first, and then the Eclipse Application configuration to launch an instance of Eclipse with the current version of the plugin loaded.
+
+Once inside the new instance, create a new blank project, and the Development\Src folder from your UDK installation into it. Basic parsing works at the moment, and a lot of the Core and Engine classes are parsed and lexed correctly, you can jump to struct, enum, class, variable and function declarations, but there's still a whole lot of work to be done.
+
+The grammar itself is more or less complete based on the grammar found over at the old Unreal wiki, but as far as I've seen Unrealscript is a huge mess of a language simply filled to the brim with exceptions to each and every rule, so most of the work remaining now is adding those exceptions to the grammar (Unrealscript.xtext) file. And it's mind-numbingly boring work.
