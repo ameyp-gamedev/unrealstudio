@@ -1,0 +1,526 @@
+grammar com.wirywolf.Unrealscript with org.eclipse.xtext.common.Terminals hidden(WS, CPP_TEXT, ML_COMMENT, SL_COMMENT, MACRO)
+
+generate unrealscript "http://www.wirywolf.com/Unrealscript"
+
+Model:
+	( classDecl=ClassDecl | interfaceDecl=InterfaceDecl )
+	( declarations += Declaration )*
+	( replications = Replication )?
+	( body = Body )
+	( defaultPropertiesBlock = DefaultPropertiesBlock )?;
+	
+ClassDecl:
+	'class' name=Word
+	( classParams += ClassParam )*
+	SEMICOLON;
+
+InterfaceDecl:
+	'interface' name=Word
+	( classParams += ClassParam )*
+	SEMICOLON;
+	
+ClassParam:
+	{ClassParam}
+	( constClassParam=ConstClassParam (LBRACK shitParam=Word RBRACK)? ) |
+	('extends' extendedClass=[ClassDecl] ) |
+	('extends' extendedInterface=[InterfaceDecl] )
+	('implements' LBRACK? implementedInterface=[InterfaceDecl] RBRACK? ) |
+	('within' withinClass=[ClassDecl]) |
+	('dependson' LBRACK dependsonClass+=[ClassDecl] (COMMA dependsonClass+=[ClassDecl])* RBRACK) |
+	('inherits' LBRACK inherits=Word RBRACK) |
+	('config' config=ConfigGroup ) |
+	('forcescriptorder' LBRACK ordered=('true'|'false') RBRACK ) |
+	('hidecategories' LBRACK ( (hideCategories+=Word|hideClasses+=[ClassDecl]) (COMMA (hideCategories+=Word|hideClasses+=[ClassDecl]))*) RBRACK) |
+	('dontsortcategories' LBRACK (dontSortCategories+=Word (COMMA dontSortCategories+=Word)*) RBRACK) |
+	('classgroup' LBRACK (classGroup+=Word (COMMA classGroup+=Word)*) RBRACK) |
+	('showcategories' LBRACK (showCategories+=Word (COMMA showCategories+=Word)*) RBRACK) ;
+
+QualifiedIdentifier:
+	( ( 'class' SQUOTE classRef=[ClassDecl] SQUOTE (DOT 'default')? 
+		( {QualifiedIdentifier.receiver=current} DOT (child=[DeclaredVariable]|childWord=Word|childFunctionCall=FunctionCall) )*
+	) | 
+	( ( (child=[DeclaredVariable|Word]|childWord=Word|childFunctionCall=FunctionCall) (LSBRACK array?=Operand RSBRACK)? )
+	  ( {QualifiedIdentifier.receiver=current} DOT ( (child=[DeclaredVariable]|childWord=Word|childFunctionCall=FunctionCall) (LSBRACK array?=Operand RSBRACK)? ) )*
+	)
+	);
+
+Declaration:
+	( ConstDeclaration | ('var' VarDeclaration) | EnumDeclaration | StructDeclaration )
+	SEMICOLON;
+	
+DeclaredVariable:
+	VarName | FunctionArg;
+	
+ConstDeclaration:
+	'const' varName=VarName '=' varValue=ConstValue;
+	
+ConstValue:
+	{ConstValue}
+	( (classType=[ClassDecl] SQUOTE (ID ( DOT ID)* ) SQUOTE) |
+	  ('class' SQUOTE classRef=[ClassDecl] SQUOTE) |
+	  declaredVar=[DeclaredVariable] |
+	  STRING | ('-'|'+')? HexVal | ('-'|'+')? INT | ('-'|'+')? FloatVal | BoolVal | NoneVal
+	);
+
+VarDeclaration:
+	( ConfigGroup )? ( varParams += VarParam )* (LCBRACK ( COMMA | Word | '*' | LABRACK | RABRACK)* RCBRACK)?
+	( (enumDeclaration=EnumDeclaration) | 
+	(
+		(parentClass=[ClassDecl] DOT)? (type=[VarType] | basicType=BasicType) (LCBRACK ( COMMA | Word | '*' | LABRACK | RABRACK)* RCBRACK)?
+		(LABRACK ('class' LABRACK)? ( ((parentTemplateClass=[ClassDecl] DOT)? templateType=[VarType]) | basicTemplateType=BasicType) RABRACK? RABRACK)?
+	) )
+	varNames+=VarName (LCBRACK ( COMMA | Word | '*' | LABRACK | RABRACK)+ RCBRACK)?
+	(additionalCrap+=AdditionalCrap)? 
+	( COMMA varNames+=VarName (LCBRACK ( COMMA | Word | '*' | LABRACK | RABRACK)+ RCBRACK)? (additionalCrap+=AdditionalCrap)? )*
+	;
+
+AdditionalCrap:
+	{AdditionalCrap}
+	(LABRACK 
+		('ArrayClamp'|'UIMin'|'UIMax'|'ClampMin'|'ClampMax'|'ScriptOrder'|'bShowOnlyWhenTrue'|'MultilineWithMaxRows'|'FullyExpand'|'ToolTip'|'EditCondition')
+		EQUALS (INT|FloatVal|'true'|'false'|'bShowD3D11Properties'|ID+|vars+=[DeclaredVariable]) 
+		('|' ('ArrayClamp'|'UIMin'|'UIMax'|'ClampMin'|'ClampMax'|'ScriptOrder'|'bShowOnlyWhenTrue'|'MultilineWithMaxRows'|'FullyExpand'|'ToolTip'|'EditCondition')
+			 EQUALS (INT|FloatVal|'true'|'false'|'bShowD3D11Properties'|ID+|vars+=[DeclaredVariable]))*
+	 RABRACK
+	)
+;
+
+ConfigGroup:
+	LBRACK ( Word (COMMA Word)* )? RBRACK;
+
+VarType:
+	EnumDeclaration |StructDeclaration | ClassDecl | InterfaceDecl;
+
+BasicType: 'byte' | 'int' | 'float' | 'string' | 'bool' | 'name' | 'class' | 'interface';
+
+EnumDeclaration:
+	'enum' name=Word LCBRACK (enumOptions+=VarName (LABRACK 'DisplayName' EQUALS Word RABRACK)? 
+		(COMMA (enumOptions+=VarName (LABRACK 'DisplayName' EQUALS Word RABRACK)?)*)*
+	) RCBRACK;
+	
+StructDeclaration:
+	'struct' (structParams+=StructParam)*  (LCBRACK shitName=Word '*'? RCBRACK)?
+	name=Word ( 'extends' parentStruct=[StructDeclaration] )?
+	LCBRACK ( (structVarDeclarations += StructVarDeclaration) SEMICOLON )*
+	(structDefaultProperties=StructDefaultPropertiesBlock)? RCBRACK;
+
+StructParam:
+	'native' | 'export' | 'immutable' | 'transient' | 'immutablewhencooked';
+
+StructVarDeclaration:
+	('var' VarDeclaration) | ConstDeclaration
+;
+	
+StructDefaultPropertiesBlock:
+	{StructDefaultPropertiesBlock}
+	'structdefaultproperties' 
+	LCBRACK
+	( structDefaultProperties += DefaultProperty )*
+	RCBRACK
+;
+
+Replication:
+	{Replication}
+	'replication' LCBRACK ( replicationStatements += ReplicationStatement )* RCBRACK;
+	
+ReplicationStatement:
+	( 'reliable' | 'unreliable' )? 'if' LBRACK replicationExpression=Primary RBRACK
+	replicationVariables+=Word ( COMMA replicationVariables+=Word )*
+	SEMICOLON;
+	
+Body:
+	{Body} declarations += ( StateDeclaration | FunctionDeclaration )*;
+	
+StateDeclaration:
+	( stateparams += StateParam )*
+	'state' stateName=Word ( stateConfigGroup=ConfigGroup )?
+	( 'extends' parentState=[StateDeclaration] )?
+	stateBody=StateBody;
+	
+StateBody:
+	{StateBody} LCBRACK ( 'ignores' ignoredList+=Word ( COMMA ignoredList+=Word )* )?
+	( functionDeclarations += FunctionDeclaration )*
+	( stateLabels += StateLabel )* RCBRACK;
+	
+StateLabel:
+	stateLabel=Word COLON ( stateLabelCodeline = CodeLine )?;
+	
+FunctionDeclaration:
+	( FunctionParam )*
+	functionType=FunctionType (LBRACK INT RBRACK)?
+	( FunctionParam )*
+	( type=[VarType]|basicType=BasicType )? (LABRACK (templateType=[VarType]|basicTemplateType=BasicType) RABRACK)?
+	name=(Word | OperatorName)
+	LBRACK 
+	( functionArgList += FunctionArg ( COMMA functionArgList += FunctionArg )* )?
+	RBRACK 'const'?
+	functionBody=FunctionBody SEMICOLON?;
+	
+FunctionParam:
+	ConstFuncParam ( LBRACK INT RBRACK )?;
+	
+FunctionArg:
+	( 'optional' | 'out' | 'coerce' | 'skip' | 'const' )*
+	(type=[VarType]|basicType=BasicType) (LABRACK (templateType=[VarType]|basicTemplateType=BasicType) RABRACK)?
+	name=Word (LSBRACK arraySize=INT RSBRACK)? (EQUALS defaultValue=Primary)?
+	;
+
+FunctionBody:
+	{FunctionBody}
+	(LCBRACK)?
+	( ( 
+		( localDeclarations += LocalDeclaration )*
+	    ( codeLines += CodeLine )*
+	  )
+	  ( SEMICOLON )? 
+	)
+	(RCBRACK)?;
+
+LocalDeclaration:
+	'local' varDeclaration=VarDeclaration SEMICOLON;
+
+VarName:
+	name=Word (LSBRACK array?=Operand RSBRACK)?;
+	
+CodeLine:
+	Assignment | IfThenElse | WhileLoop | DoLoop |
+	SwitchCase | ReturnStatement | ForEachLoop | ForLoop;
+	
+CodeBlock:
+	{CodeBlock}
+	(LCBRACK)?
+	(codelines += CodeLine)*
+	(RCBRACK)?;
+	
+FunctionCall:
+	(functionName=[FunctionCallType]|basicName=BasicType)
+	LBRACK ( expressionList+=Primary (COMMA expressionList+=Primary)* )?
+	RBRACK;
+	
+FunctionCallType:
+	FunctionDeclaration | StructDeclaration | ClassDecl;
+	
+Assignment:
+	assignmentName=QualifiedIdentifier (EQUALS varValue=Primary)? SEMICOLON;
+
+IfThenElse:
+	'if' LBRACK ifCondition=Primary RBRACK ( ifBlock=CodeBlock ) 
+	(=> 'else' ( elseBlock=CodeBlock ) )?;
+	
+WhileLoop:
+	'while' LBRACK ( whileCondition=Primary ) RBRACK 
+	(=> whileBlock = CodeBlock );
+
+DoLoop:
+	'do' ( doBlock = CodeBlock ) 'until' LBRACK ( doCondition=Primary ) RBRACK;
+	
+SwitchCase:
+	'switch' LBRACK switchVariable=Primary RBRACK 
+	LCBRACK ( caseRules += CaseRule )+
+	( defaultRule = DefaultRule )? RCBRACK;
+	
+CaseRule:
+	'case' switchCase=INT COLON (=> caseCodeBlock=CodeBlock);
+	
+DefaultRule:
+	'default' ( defaultBlock=CodeBlock );
+	
+ReturnStatement:
+	{ReturnStatement}
+	'return' ( returnExpression=Primary )? SEMICOLON;
+	
+ForEachLoop:
+	'foreach' ( foreachFunctionCall=QualifiedIdentifier ) 
+	(=> foreachCodeBlock=CodeBlock );
+	
+ForLoop:
+	'for' LBRACK ( forAssignment=Assignment ) 
+	( forCondition = Primary ) SEMICOLON
+	( forExpression = Primary )RBRACK 
+	(=> forCodeBlock = CodeBlock );
+	
+Primary returns Expression:
+	Primary1 ({Primary1.left=current} 
+	('ClockwiseFrom') right=Primary1)*;
+
+Primary1 returns Expression:
+	Primary2 ({Primary2.left=current} 
+	('?') right=Primary2)*;
+
+Primary2 returns Expression:
+	Primary3 ({Primary3.left=current} 
+	(':') right=Primary3)*;
+
+Primary3 returns Expression:
+	Primary4 ({Primary4.left=current} 
+	('**') right=Primary4)*;
+
+Primary4 returns Expression:
+	Primary5 ({Primary5.left=current} 
+	('Cross') right=Primary5)*;
+
+Primary5 returns Expression:
+	Primary6 ({Primary6.left=current} 
+	('Dot') right=Primary6)*;
+
+Primary6 returns Expression:
+	Primary7 ({Primary7.left=current} 
+	('/') right=Primary7)*;
+
+Primary7 returns Expression:
+	Primary8 ({Primary8.left=current} 
+	('*') right=Primary8)*;
+
+Primary8 returns Expression:
+	Primary9 ({Primary9.left=current} 
+	('%') right=Primary9)*;
+
+Primary9 returns Expression:
+	Primary10 ({Primary10.left=current} 
+	('-') right=Primary10)*;
+
+Primary10 returns Expression:
+	Primary11 ({Primary11.left=current} 
+	('+') right=Primary11)*;
+
+Primary11 returns Expression:
+	Primary12 ({Primary12.left=current} 
+	('>>>') right=Primary12)*;
+
+Primary12 returns Expression:
+	Primary13 ({Primary13.left=current} 
+	('>>') right=Primary13)*;
+
+Primary13 returns Expression:
+	Primary14 ({Primary14.left=current} 
+	('<<') right=Primary14)*;
+
+Primary14 returns Expression:
+	Primary15 ({Primary15.left=current} 
+	('~=') right=Primary15)*;
+
+Primary15 returns Expression:
+	Primary16 ({Primary16.left=current} 
+	('>=') right=Primary16)*;
+
+Primary16 returns Expression:
+	Primary17 ({Primary17.left=current} 
+	('<=') right=Primary17)*;
+
+Primary17 returns Expression:
+	Primary18 ({Primary18.left=current} 
+	('>') right=Primary18)*;
+
+Primary18 returns Expression:
+	Primary19 ({Primary19.left=current} 
+	('<') right=Primary19)*;
+
+Primary19 returns Expression:
+	Primary20 ({Primary20.left=current} 
+	('==') right=Primary20)*;
+
+Primary20 returns Expression:
+	Primary21 ({Primary21.left=current} 
+	('!=') right=Primary21)*;
+
+Primary21 returns Expression:
+	Primary22 ({Primary22.left=current} 
+	('^') right=Primary22)*;
+
+Primary22 returns Expression:
+	Primary23 ({Primary23.left=current} 
+	('|') right=Primary23)*;
+
+Primary23 returns Expression:
+	Primary24 ({Primary24.left=current} 
+	('&') right=Primary24)*;
+
+Primary24 returns Expression:
+	Primary25 ({Primary25.left=current} 
+	('^^') right=Primary25)*;
+
+Primary25 returns Expression:
+	Primary26 ({Primary26.left=current} 
+	('&&') right=Primary26)*;
+
+Primary26 returns Expression:
+	Primary27 ({Primary27.left=current} 
+	('||') right=Primary27)*;
+
+Primary27 returns Expression:
+	Primary28 ({Primary28.left=current} 
+	('-=') right=Primary28)*;
+
+Primary28 returns Expression:
+	Primary29 ({Primary29.left=current} 
+	('+=') right=Primary29)*;
+
+Primary29 returns Expression:
+	Primary30 ({Primary30.left=current} 
+	('/=') right=Primary30)*;
+
+Primary30 returns Expression:
+	Primary31 ({Primary31.left=current} 
+	('*=') right=Primary31)*;
+
+Primary31 returns Expression:
+	Primary32 ({Primary32.left=current} 
+	('$=') right=Primary32)*;
+
+Primary32 returns Expression:
+	Primary33 ({Primary33.left=current} 
+	('$') right=Primary33)*;
+
+Primary33 returns Expression:
+	Primary34 ({Primary34.left=current} 
+	('@=') right=Primary34)*;
+
+Primary34 returns Expression:
+	Operand ({Primary35.left=current} 
+	('@') right=Operand)*;
+
+
+	
+Operand:
+	('-' | '~' | '!' | '++' | '--')?
+	( constValue=ConstValue | 
+	qualifierIdentifier=QualifiedIdentifier |
+	LBRACK primaryValue=Primary RBRACK )
+	('--' | '++')?;
+
+This:
+	variable='this';
+
+Self:
+	variable='self';
+
+Super:
+	variable='super';
+	
+DefaultPropertiesBlock:
+	{DefaultPropertiesBlock}
+	'defaultproperties' 
+	LCBRACK
+	( defaultProperties += DefaultProperty )*
+	RCBRACK;
+
+DefaultProperty:
+	{DefaultProperty}
+	(
+	(defaultPropertyIdentifier=DefaultPropertyIdentifier EQUALS 
+		( (defaultPropertyValue=Primary) | (LSBRACK? LBRACK ( defaultProperties += DefaultProperty ( COMMA defaultProperties += DefaultProperty )* )+ RBRACK RSBRACK?) ) (SEMICOLON)?
+	) | 
+	('begin' beginObjectType=[ClassDecl] ( ('name' EQUALS varName=VarName) & ('class' EQUALS type=[ClassDecl]) )) |
+	('end' endObjectType=[ClassDecl])
+	);
+	
+DefaultPropertyIdentifier:	
+	(defaultPropertyName=QualifiedIdentifier) 
+	( ( LBRACK array?=Operand RBRACK ) |
+	  ( LSBRACK array?=Operand RSBRACK )
+	)?;
+	
+FQN: ID (DOT ID)*;
+
+terminal HexVal:
+	'0x' ('a'..'f' | '0'..'9')+
+;
+
+NoneVal:
+	'none';
+
+FloatVal:
+	INT? DOT INT* 'f'?;
+	
+terminal CPP_TEXT:
+	('cpptext' | 'structcpptext') -> '{' -> '}' ';'?;
+
+terminal MACRO:
+	'`' !('\n' | '\r')* ('\r'? '\n')?;
+	
+SEMICOLON:
+	';';
+	
+COLON:
+	':';
+
+LBRACK:
+	'(';
+	
+RBRACK:
+	')';
+	
+LABRACK:
+	'<';
+	
+RABRACK:
+	'>';
+	
+LCBRACK:
+	'{';
+	
+RCBRACK:
+	'}';
+	
+LSBRACK:
+	'[';
+	
+RSBRACK:
+	']';
+	
+DOT:
+	'.';
+	
+COMMA:
+	',';
+	
+SQUOTE:
+	'\'';
+	
+DQUOTE:
+	'"';
+	
+EQUALS:
+	'=' | '~=' | '>=' | '<=' | '==' | '!=' | '-=' | '+=' | '/=' | '*=' | '$=' | '@=';
+	
+ConstClassParam:
+	'abstract' | 'native' | 'nativereplication' | 'safereplace' |
+	'perobjectconfig' | 'transient' | 'noexport' | 'exportstructs' |
+	'collapsecategories' | 'dontcollapsecategories' | 'placeable' |
+	'notplaceable' | 'editinline' | 'noteditinline' | 'editinlinenew';
+	
+VarParam:
+	LCBRACK? ('config' | 'const' | 'editconst' | 'export' | 'globalconfig' | 'input' |
+	'interp' | 'localized' | 'native' | 'noexport' | 'noimport' | 'crosslevelpassive' | 'public' | 'private' | 'protected' | 'repnotify'|
+	'transient' | 'travel' | 'editinline' | 'deprecated' | 'edfindable' | 'editfixedsize' |
+	'editinlineuse' | 'editoronly' | 'transient' | 'duplicatetransient' | 'nontransactional' |
+	'noclear' | 'edithide' | 'instanced' | 'notforconsole' | 'serializetext' |
+	'protectedwrite' | 'databinding') RCBRACK?;
+	
+StateParam:
+	'auto' | 'simulated';
+	
+ConstFuncParam:
+	'final' | 'iterator' | 'latent' | 'simulated' | 'singular' | 'static' |
+	'exec' | 'protected' | 'private' | 'native' | 'noexport' | 'noimport' |
+	'duplicatetransient' | 'virtual';
+
+FunctionType:
+	'function' | 'event' | 'delegate' | 'operator' | 'preoperator' | 'postoperator';
+	
+OperatorName:
+    '<<' | '>>' | '!=' | '<=' | '>=' | '++' | '--' | '?-' | '+=' | 
+    '-=' | '*=' | '/=' | '&&' | '||' | '^^' | '==' | '**' | '$=' |
+    '~=' | '@=' | '>>>' | '~' | '!' | '@' | '#' | '$' | '%' | '^' | '&' | '*' | 
+    '-' | '=' | '+' | '|' | '\\' | ':' | '<' | '>' | '/' |
+    '?' | '`';
+	
+BoolVal:
+	'true' | 'false';
+
+Word:
+	ID | 'config' | 'const' | 'switch' |
+	'input' | 'state' | 'class' | 'struct' | 'string' | 'int' | 'end' | 'begin' |
+	'interface'| 'name'| 'default' | 'function' | 'static' |
+	'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'Dot' | 'Cross' | 'ClockwiseFrom';
+

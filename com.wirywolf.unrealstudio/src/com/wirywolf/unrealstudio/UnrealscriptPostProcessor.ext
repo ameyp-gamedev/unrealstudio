@@ -1,0 +1,42 @@
+import ecore;
+ 
+process(xtext::GeneratedMetamodel this) :
+	process(ePackage)
+;
+ 
+process(EPackage this) :
+	eClassifiers.typeSelect(EClass).process()
+;
+ 
+process(EClass this) :
+	switch (name) {
+		case "Foo": (addOperation("getType", getEClassifier("VarType")))
+		default:	null
+	}
+;
+ 
+EDataType getEcoreDataType(String name) :
+    org::eclipse::emf::ecore::EcorePackage::eINSTANCE.getEClassifier(name)
+;
+ 
+addOperation(EClass this, String name, EClassifier type) :
+	let op  = newOperation(name, type) :
+		newDelegatingBodyAnnotation(op)
+;
+ 
+create EOperation newOperation(EClass owner, String name, EClassifier type) :
+	setName(name) -> setEType(type) -> owner.eOperations.add(this)
+;
+ 
+create EAnnotation newDelegatingBodyAnnotation(EOperation op) :
+	let d = new EStringToStringMapEntry :
+		setSource("http://www.eclipse.org/emf/2002/GenModel") ->
+		d.setKey("body") ->
+		d.setValue((op.eType != null ? "return " : "") + op.delegateMethodName() + "(this);") ->
+		details.add(d) ->
+		op.eAnnotations.add(this)
+;
+ 
+delegateMethodName(EOperation this) :
+	"com.wirywolf.UnrealscriptTypeHelper." + name
+;

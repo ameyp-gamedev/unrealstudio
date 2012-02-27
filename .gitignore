@@ -1,0 +1,9 @@
+META-INF
+bin
+src-gen
+xtend-gen
+plugin.xml_gen
+.hg
+.hgignore
+.metadata
+*~
